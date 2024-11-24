@@ -1,4 +1,3 @@
-// _meta.tsx
 export default {
   "getting-started": "getting started",
   "plugins": "plugins (pipes)",
