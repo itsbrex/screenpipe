@@ -1324,16 +1324,16 @@ export const AIPresetsSelector = ({
     <>
       <div className="flex flex-col w-full gap-2">
         {!isControlled && selectedPresetRequiresLogin && (
-          <div className="flex items-center gap-2 p-2 text-sm bg-amber-500/10 border border-amber-500/20 rounded-lg">
-            <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
-            <span className="text-amber-600 dark:text-amber-400 flex-1">
+          <div className="flex items-center gap-2 p-2 text-sm bg-muted border border-border rounded-lg">
+            <AlertTriangle className="h-4 w-4 text-muted-foreground shrink-0" />
+            <span className="text-foreground flex-1">
               Login required to use Screenpipe Cloud
             </span>
             {showLoginCta && (
               <Button
                 variant="outline"
                 size="sm"
-                className="shrink-0 h-7 text-xs border-amber-500/30 hover:bg-amber-500/10"
+                className="shrink-0 h-7 text-xs border-border hover:bg-muted"
                 onClick={async () => {
                   await commands.showWindow({ Home: { page: "account" } });
                 }}
@@ -1400,7 +1400,7 @@ export const AIPresetsSelector = ({
               </PopoverTrigger>
               <TooltipContent>
                 {selectedPresetRequiresLogin ? (
-                  <p className="text-amber-500">
+                  <p className="text-muted-foreground">
                     Login required to use this preset
                   </p>
                 ) : (

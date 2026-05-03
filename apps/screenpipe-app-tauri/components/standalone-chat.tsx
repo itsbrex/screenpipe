@@ -2436,14 +2436,16 @@ export function StandaloneChat({
   const isPi = true;
   const hasValidModel = activePreset?.model && activePreset.model.trim() !== "";
   const needsLogin = activePreset?.provider === "screenpipe-cloud" && !settings.user?.token;
+  // needsLogin is advisory only — chat is allowed without auth (the cloud
+  // backend accepts unauthenticated requests for now). The login warning is
+  // surfaced in the UI banner but does not gate sends.
   // Pi auto-starts on first message, so don't block chat when Pi is not running
-  const canChat = hasPresets && hasValidModel && !needsLogin && !piStarting;
+  const canChat = hasPresets && hasValidModel && !piStarting;
 
   const getDisabledReason = (): string | null => {
     if (!hasPresets) return "No AI presets configured";
     if (!activePreset) return "No preset selected";
     if (!hasValidModel) return `No model selected in "${activePreset.id}" preset`;
-    if (needsLogin) return "Login required";
     if (piStarting) return "Starting Pi agent...";
     return null;
   };
