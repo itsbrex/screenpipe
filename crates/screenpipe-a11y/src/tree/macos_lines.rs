@@ -60,9 +60,8 @@ fn copy_param_attr(
     parameter: &cf::Type,
 ) -> Option<arc::R<cf::Type>> {
     let mut out: Option<arc::R<cf::Type>> = None;
-    let status = unsafe {
-        AXUIElementCopyParameterizedAttributeValue(elem, attr_name, parameter, &mut out)
-    };
+    let status =
+        unsafe { AXUIElementCopyParameterizedAttributeValue(elem, attr_name, parameter, &mut out) };
     if status.is_ok() {
         out
     } else {
@@ -237,7 +236,12 @@ pub(crate) struct NormalizeRefs {
 impl NormalizeRefs {
     pub fn normalize(&self, x: f64, y: f64, w: f64, h: f64) -> Option<NodeBounds> {
         let (rx, ry, rw, rh) = if self.monitor_w > 0.0 && self.monitor_h > 0.0 {
-            (self.monitor_x, self.monitor_y, self.monitor_w, self.monitor_h)
+            (
+                self.monitor_x,
+                self.monitor_y,
+                self.monitor_w,
+                self.monitor_h,
+            )
         } else if self.window_w > 0.0 && self.window_h > 0.0 {
             (self.window_x, self.window_y, self.window_w, self.window_h)
         } else {
@@ -500,7 +504,9 @@ mod tests {
             window_w: 800.0,
             window_h: 600.0,
         };
-        let nb = refs.normalize(100.0, 100.0, 400.0, 300.0).expect("normalizes");
+        let nb = refs
+            .normalize(100.0, 100.0, 400.0, 300.0)
+            .expect("normalizes");
         assert!((nb.width - 0.5).abs() < 1e-6);
         assert!((nb.height - 0.5).abs() < 1e-6);
     }

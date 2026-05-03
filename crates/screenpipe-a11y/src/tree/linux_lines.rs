@@ -65,7 +65,12 @@ pub(crate) struct NormalizeRefs {
 impl NormalizeRefs {
     pub fn normalize(&self, x: f64, y: f64, w: f64, h: f64) -> Option<NodeBounds> {
         let (rx, ry, rw, rh) = if self.monitor_w > 0.0 && self.monitor_h > 0.0 {
-            (self.monitor_x, self.monitor_y, self.monitor_w, self.monitor_h)
+            (
+                self.monitor_x,
+                self.monitor_y,
+                self.monitor_w,
+                self.monitor_h,
+            )
         } else if self.window_w > 0.0 && self.window_h > 0.0 {
             (self.window_x, self.window_y, self.window_w, self.window_h)
         } else {

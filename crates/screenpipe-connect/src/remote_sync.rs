@@ -522,7 +522,10 @@ async fn sync_to_remote_inner(config: &SyncConfig, data_dir: &Path) -> Result<Sy
 
         match snapshot_db(&db_path, &snap).await {
             Ok(()) => {
-                let bytes = tokio::fs::metadata(&snap).await.map(|m| m.len()).unwrap_or(0);
+                let bytes = tokio::fs::metadata(&snap)
+                    .await
+                    .map(|m| m.len())
+                    .unwrap_or(0);
                 info!("db snapshot ready ({} bytes)", bytes);
                 Some(snap)
             }

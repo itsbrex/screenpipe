@@ -786,7 +786,7 @@ mod tests {
         // ratio of 0.5 doesn't make sense; should clamp to 1.0 so threshold
         // becomes the bare aspect-ratio capacity.
         let bounds = bb(0.5, 0.1); // chars_per_line_est ≈ 14.5
-        // 16 chars > 14.5 → should be multi-line even with ratio < 1.
+                                   // 16 chars > 14.5 → should be multi-line even with ratio < 1.
         assert!(node_looks_multiline(&"x".repeat(16), &bounds, 0.5));
     }
 

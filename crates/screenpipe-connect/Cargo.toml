@@ -7,6 +7,11 @@ repository = { workspace = true }
 license = { workspace = true }
 edition = { workspace = true }
 
+# libsqlite3-sys is pulled in for the `bundled` feature so workspace crates
+# link against the same C SQLite. Not directly imported here — silence machete.
+[package.metadata.cargo-machete]
+ignored = ["libsqlite3-sys"]
+
 [dependencies]
 image = { workspace = true }
 reqwest = { workspace = true }
