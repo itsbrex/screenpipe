@@ -87,11 +87,16 @@ impl ModelDownloader {
         }
 
         let path = self.cache_dir.join(&self.filename);
-        let tmp_path = self.cache_dir.join(format!("{}.downloading", self.filename));
+        let tmp_path = self
+            .cache_dir
+            .join(format!("{}.downloading", self.filename));
 
         // Clean up incomplete downloads from previous interrupted runs
         if tmp_path.exists() {
-            debug!("removing incomplete {} download: {:?}", self.filename, tmp_path);
+            debug!(
+                "removing incomplete {} download: {:?}",
+                self.filename, tmp_path
+            );
             let _ = tokio::fs::remove_file(&tmp_path).await;
         }
 
@@ -111,7 +116,10 @@ impl ModelDownloader {
 
         if started_download {
             // This thread starts the download
-            info!("initiating {} model download from {}", self.filename, self.url);
+            info!(
+                "initiating {} model download from {}",
+                self.filename, self.url
+            );
             let url = self.url.clone();
             let filename = self.filename.clone();
             let cache_dir = self.cache_dir.clone();
@@ -138,9 +146,9 @@ impl ModelDownloader {
                             );
                             last_err = Some(e);
                             if attempt < MAX_RETRIES {
-                                tokio::time::sleep(
-                                    tokio::time::Duration::from_secs(2u64.pow(attempt)),
-                                )
+                                tokio::time::sleep(tokio::time::Duration::from_secs(
+                                    2u64.pow(attempt),
+                                ))
                                 .await;
                             }
                         }
@@ -348,7 +356,9 @@ mod tests {
     #[ignore]
     async fn integration_real_silero_vad_download() {
         // Use real Silero VAD URL (smaller/faster than pyannote models)
-        let url = "https://github.com/snakers4/silero-vad/raw/master/src/silero_vad/data/silero_vad.onnx".to_string();
+        let url =
+            "https://github.com/snakers4/silero-vad/raw/master/src/silero_vad/data/silero_vad.onnx"
+                .to_string();
         let filename = "test_silero_vad_integration.onnx".to_string();
 
         let dir = tempdir().unwrap();
@@ -373,11 +383,18 @@ mod tests {
 
         let file_size = std::fs::metadata(&path1).unwrap().len();
         println!("Downloaded: {} bytes in {:?}", file_size, download_time);
-        assert!(file_size > 100_000, "Model should be substantial (>100KB), got {}", file_size);
+        assert!(
+            file_size > 100_000,
+            "Model should be substantial (>100KB), got {}",
+            file_size
+        );
 
         // Verify no .downloading temp file left behind
         let tmp_path = cache_dir.join(format!("{}.downloading", filename));
-        assert!(!tmp_path.exists(), "Temp .downloading file should be cleaned up");
+        assert!(
+            !tmp_path.exists(),
+            "Temp .downloading file should be cleaned up"
+        );
 
         // Second call: should use cache (fast)
         let start = std::time::Instant::now();
@@ -388,7 +405,11 @@ mod tests {
         let path2 = result2.unwrap();
         assert_eq!(path1, path2, "Should return same cached path");
         println!("Cache hit: same path in {:?}", cache_time);
-        assert!(cache_time.as_millis() < 100, "Cache hit should be <100ms, got {:?}", cache_time);
+        assert!(
+            cache_time.as_millis() < 100,
+            "Cache hit should be <100ms, got {:?}",
+            cache_time
+        );
 
         println!("PASSED: Real download + caching works correctly");
     }
@@ -401,7 +422,9 @@ mod tests {
     async fn integration_concurrent_downloads() {
         use std::sync::Arc;
 
-        let url = "https://github.com/snakers4/silero-vad/raw/master/src/silero_vad/data/silero_vad.onnx".to_string();
+        let url =
+            "https://github.com/snakers4/silero-vad/raw/master/src/silero_vad/data/silero_vad.onnx"
+                .to_string();
         let filename = "concurrent_test.onnx".to_string();
         let dir = tempdir().unwrap();
         let cache_dir = Arc::new(dir.path().to_path_buf());
@@ -422,10 +445,15 @@ mod tests {
             let cache_dir = cache_dir.clone();
 
             let handle = tokio::spawn(async move {
-                let downloader = ModelDownloader::new(url, filename, (*cache_dir).clone(), flag, lock);
+                let downloader =
+                    ModelDownloader::new(url, filename, (*cache_dir).clone(), flag, lock);
                 println!("Task {}: calling ensure_model_available()", i);
                 let result = downloader.ensure_model_available().await;
-                println!("Task {}: result = {}", i, if result.is_ok() { "OK" } else { "waiting" });
+                println!(
+                    "Task {}: result = {}",
+                    i,
+                    if result.is_ok() { "OK" } else { "waiting" }
+                );
                 result
             });
 
@@ -496,7 +524,10 @@ mod tests {
         let elapsed = start.elapsed();
 
         assert!(result.is_err(), "Invalid URL should fail");
-        println!("Failed as expected after {:?} (with exponential backoff retries)", elapsed);
+        println!(
+            "Failed as expected after {:?} (with exponential backoff retries)",
+            elapsed
+        );
 
         // Test 2: Valid URL succeeds
         println!("Test 2: Valid URL should succeed with potential retries...");
@@ -507,7 +538,8 @@ mod tests {
         let lock2 = VALID_LOCK.get_or_init(|| Mutex::const_new(None));
 
         let valid_downloader = ModelDownloader::new(
-            "https://github.com/snakers4/silero-vad/raw/master/src/silero_vad/data/silero_vad.onnx".to_string(),
+            "https://github.com/snakers4/silero-vad/raw/master/src/silero_vad/data/silero_vad.onnx"
+                .to_string(),
             "test_retry_success.onnx".to_string(),
             dir.path().to_path_buf(),
             flag2,
@@ -518,10 +550,13 @@ mod tests {
         let result = valid_downloader.ensure_model_available().await;
         let elapsed = start.elapsed();
 
-        assert!(result.is_ok(), "Valid URL should eventually succeed: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "Valid URL should eventually succeed: {:?}",
+            result
+        );
         println!("Downloaded successfully in {:?}", elapsed);
 
         println!("PASSED: Retry logic works (fails fast on bad URLs, succeeds on valid)");
     }
 }
-

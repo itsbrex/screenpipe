@@ -98,11 +98,10 @@ impl SegmentationManager {
 
         let mut embedding_model_path = self.embedding_model_path.lock().await;
         let previous_embedding_model = embedding_model_path.clone();
-        let embedding_model: Option<PathBuf> =
-            get_or_download_model(PyannoteModel::Embedding)
-                .await
-                .ok()
-                .map(|model| model.path);
+        let embedding_model: Option<PathBuf> = get_or_download_model(PyannoteModel::Embedding)
+            .await
+            .ok()
+            .map(|model| model.path);
 
         let mut embedding_extractor = self.embedding_extractor.lock().await;
         let had_embedding_extractor = embedding_extractor.is_some();

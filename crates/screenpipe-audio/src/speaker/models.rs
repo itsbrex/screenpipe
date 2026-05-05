@@ -51,8 +51,7 @@ async fn get_or_download_model_with_retries(
                 if !path.exists() {
                     warn!(
                         "cached {} model at {:?} no longer exists on disk, redownloading",
-                        filename,
-                        path
+                        filename, path
                     );
                     *cached = None;
                 }
@@ -74,10 +73,7 @@ async fn get_or_download_model_with_retries(
                 retry_count += 1;
                 warn!(
                     "{} model has ORT load error, clearing cache and retrying ({}/{}): {}",
-                    filename,
-                    retry_count,
-                    max_retries,
-                    err
+                    filename, retry_count, max_retries, err
                 );
                 clear_model_cache(model_type, &path).await?;
             }
@@ -88,7 +84,12 @@ async fn get_or_download_model_with_retries(
 
 fn model_state(
     model_type: PyannoteModel,
-) -> (&'static str, &'static str, &'static Mutex<Option<PathBuf>>, &'static AtomicBool) {
+) -> (
+    &'static str,
+    &'static str,
+    &'static Mutex<Option<PathBuf>>,
+    &'static AtomicBool,
+) {
     match model_type {
         PyannoteModel::Segmentation => (
             "https://github.com/screenpipe/screenpipe/raw/refs/heads/main/crates/screenpipe-audio/models/pyannote/segmentation-3.0.onnx",
