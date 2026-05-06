@@ -9,6 +9,7 @@ import {
   Calendar,
   Check,
   Clock,
+  Copy,
   Loader2,
   Sparkles,
   Square,
@@ -38,6 +39,8 @@ import {
 } from "@/lib/utils/meeting-format";
 import {
   buildEnrichedSummarizePrompt,
+  buildMeetingMarkdown,
+  fetchMeetingAudio,
   fetchMeetingContext,
   type MeetingContext,
 } from "@/lib/utils/meeting-context";
@@ -79,6 +82,8 @@ export function NoteView({
   const [note, setNote] = useState(meeting.note ?? "");
   const [saveState, setSaveState] = useState<SaveState>({ kind: "idle" });
   const [summarizing, setSummarizing] = useState(false);
+  const [copying, setCopying] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [meetingCtx, setMeetingCtx] = useState<MeetingContext | null>(null);
 
   const lastSavedRef = useRef({
@@ -245,6 +250,52 @@ export function NoteView({
     }
   };
 
+  const handleCopy = async () => {
+    if (copying) return;
+    setCopying(true);
+    try {
+      const fresh: MeetingRecord = {
+        ...meeting,
+        title: title || null,
+        attendees: attendees || null,
+        note: note || null,
+      };
+      // Always re-fetch context + transcript on copy so the clipboard reflects
+      // what the user sees right now (live meetings update; speaker rename can
+      // happen without re-rendering ReplayStrip).
+      const [ctx, transcript] = await Promise.all([
+        fetchMeetingContext(fresh),
+        fetchMeetingAudio(
+          new Date(meeting.meeting_start).toISOString(),
+          (meeting.meeting_end
+            ? new Date(meeting.meeting_end)
+            : new Date()
+          ).toISOString(),
+        ).catch(() => []),
+      ]);
+      setMeetingCtx(ctx);
+
+      const md = buildMeetingMarkdown({
+        meeting: fresh,
+        context: ctx,
+        transcript,
+      });
+      await navigator.clipboard.writeText(md);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+      toast({ title: "copied to clipboard" });
+    } catch (err) {
+      console.error("failed to copy meeting", err);
+      toast({
+        title: "couldn't copy",
+        description: String(err),
+        variant: "destructive",
+      });
+    } finally {
+      setCopying(false);
+    }
+  };
+
   const handleDelete = async () => {
     try {
       const res = await localFetch(`/meetings/${meeting.id}`, {
@@ -280,12 +331,29 @@ export function NoteView({
             <ArrowLeft className="h-3.5 w-3.5" />
             meetings
           </Button>
-          {isLive ? (
-            <span className="flex items-center gap-2 text-xs uppercase tracking-[0.15em] text-foreground">
-              <span className="h-1.5 w-1.5 rounded-full bg-foreground animate-pulse" />
-              recording
-            </span>
-          ) : (
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleCopy}
+              disabled={copying}
+              title="copy meeting + transcript to clipboard"
+              className="h-8 w-8 p-0"
+            >
+              {copying ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : copied ? (
+                <Check className="h-3.5 w-3.5" />
+              ) : (
+                <Copy className="h-3.5 w-3.5" />
+              )}
+            </Button>
+            {isLive ? (
+              <span className="flex items-center gap-2 text-xs uppercase tracking-[0.15em] text-foreground">
+                <span className="h-1.5 w-1.5 rounded-full bg-foreground animate-pulse" />
+                recording
+              </span>
+            ) : (
             <Button
               variant="default"
               size="sm"
@@ -300,7 +368,8 @@ export function NoteView({
               )}
               summarize with AI
             </Button>
-          )}
+            )}
+          </div>
         </div>
 
         <input

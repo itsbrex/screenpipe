@@ -340,6 +340,154 @@ function formatTimeShort(iso: string): string {
   });
 }
 
+// ─── Clipboard markdown ──────────────────────────────────────────────────
+
+interface MeetingMarkdownInput {
+  meeting: MeetingRecord;
+  context: MeetingContext | null;
+  /** Full transcript chunks for the meeting time range. Pass `null` if not
+   *  fetched yet — the bundle falls back to the top fragments from context. */
+  transcript: MeetingAudioChunk[] | null;
+}
+
+/**
+ * Render a meeting + its context as a single markdown document fit for the
+ * clipboard. Pasteable into Notion, Obsidian, Linear, etc.
+ *
+ * Sections are emitted only when they have data — an empty meeting yields a
+ * lean header without empty "## Apps" stubs. Transcript is preferred from
+ * the full chunk list when supplied; otherwise falls back to the curated
+ * top fragments from the context bundle.
+ */
+export function buildMeetingMarkdown({
+  meeting,
+  context,
+  transcript,
+}: MeetingMarkdownInput): string {
+  const start = new Date(meeting.meeting_start);
+  const end = meeting.meeting_end ? new Date(meeting.meeting_end) : null;
+  const durationMin = end
+    ? Math.max(1, Math.round((end.getTime() - start.getTime()) / 60000))
+    : null;
+
+  const parts: string[] = [];
+
+  // Header
+  parts.push(`# ${meeting.title?.trim() || "untitled meeting"}`);
+
+  const meta: string[] = [];
+  meta.push(`**Time:** ${formatHumanRange(start, end)}`);
+  if (durationMin !== null) meta.push(`**Duration:** ${durationMin} min`);
+  if (meeting.attendees) meta.push(`**Attendees:** ${meeting.attendees}`);
+  if (meeting.meeting_app && meeting.meeting_app !== "manual") {
+    meta.push(`**App:** ${meeting.meeting_app}`);
+  }
+  parts.push(meta.join("  \n"));
+
+  // Notes
+  if (meeting.note?.trim()) {
+    parts.push(`## Notes\n\n${meeting.note.trim()}`);
+  }
+
+  // Activity-derived sections
+  const activity = context?.activity ?? null;
+  if (activity) {
+    const apps = topAppSummary(activity.apps, 6);
+    if (apps) parts.push(`## Apps used\n\n${formatAppsLines(activity.apps, 6)}`);
+
+    const urls = pickReceiptUrls(activity.windows, 10);
+    if (urls.length > 0) {
+      parts.push(
+        `## Tabs / docs visited\n\n${urls
+          .map(
+            (u) =>
+              `- [${u.window_name || hostFromUrl(u.browser_url)}](${u.browser_url}) — ${u.minutes}m`,
+          )
+          .join("\n")}`,
+      );
+    }
+
+    if (activity.audio_summary.speakers.length > 0) {
+      parts.push(
+        `## Speakers\n\n${activity.audio_summary.speakers
+          .map((s) => `- ${s.name} (${s.segment_count} segments)`)
+          .join("\n")}`,
+      );
+    }
+  }
+
+  // Transcript — prefer full chunk list, fall back to top fragments
+  const transcriptLines = renderTranscript(transcript, activity);
+  if (transcriptLines) parts.push(`## Transcript\n\n${transcriptLines}`);
+
+  if (context && context.clipboardCount > 0) {
+    parts.push(
+      `_${context.clipboardCount} clipboard event${
+        context.clipboardCount === 1 ? "" : "s"
+      } during meeting._`,
+    );
+  }
+
+  return parts.join("\n\n") + "\n";
+}
+
+function formatHumanRange(start: Date, end: Date | null): string {
+  const dateStr = start.toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+  const startTime = start.toLocaleTimeString(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  if (!end) return `${dateStr}, ${startTime} (ongoing)`;
+  const endTime = end.toLocaleTimeString(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return `${dateStr}, ${startTime} – ${endTime}`;
+}
+
+function formatAppsLines(apps: AppUsage[], limit: number): string {
+  return apps
+    .slice(0, limit)
+    .map((a) => `- ${a.name.toLowerCase()} (${a.minutes}m)`)
+    .join("\n");
+}
+
+function renderTranscript(
+  full: MeetingAudioChunk[] | null,
+  activity: ActivitySummary | null,
+): string {
+  if (full && full.length > 0) {
+    return full
+      .map((c) => {
+        const ts = formatTimeShort(c.timestamp);
+        const sp =
+          c.speakerName && c.speakerName !== "unknown"
+            ? `[${c.speakerName}] `
+            : "";
+        const txt = c.transcription.replace(/\s+/g, " ").trim();
+        return `- ${ts} ${sp}${txt}`;
+      })
+      .join("\n");
+  }
+  // Fallback: curated top fragments (already capped at 8 in the activity)
+  const top = activity?.audio_summary.top_transcriptions ?? [];
+  if (top.length === 0) return "";
+  return top
+    .map((t) => {
+      const ts = formatTimeShort(t.timestamp);
+      const sp =
+        t.speaker && t.speaker !== "unknown" ? `[${t.speaker}] ` : "";
+      const txt = t.transcription.replace(/\s+/g, " ").trim();
+      return `- ${ts} ${sp}${txt}`;
+    })
+    .join("\n");
+}
+
 // ─── Frame lookup for replay-the-moment ──────────────────────────────────
 
 interface SearchOcrItem {
