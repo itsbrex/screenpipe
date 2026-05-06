@@ -586,8 +586,7 @@ fn model_list(json: bool) -> anyhow::Result<()> {
 }
 
 fn model_show(id: &str, json: bool) -> anyhow::Result<()> {
-    let preset = presets::get(id)?
-        .ok_or_else(|| anyhow::anyhow!("preset '{}' not found", id))?;
+    let preset = presets::get(id)?.ok_or_else(|| anyhow::anyhow!("preset '{}' not found", id))?;
 
     if json {
         println!("{}", serde_json::to_string_pretty(&preset)?);
@@ -605,7 +604,10 @@ fn model_show(id: &str, json: bool) -> anyhow::Result<()> {
     println!("provider:         {}", s("provider"));
     println!("model:            {}", s("model"));
     let url = preset.get("url").and_then(|v| v.as_str()).unwrap_or("");
-    println!("url:              {}", if url.is_empty() { "-" } else { url });
+    println!(
+        "url:              {}",
+        if url.is_empty() { "-" } else { url }
+    );
     let api_key = preset.get("apiKey").and_then(|v| v.as_str()).unwrap_or("");
     println!("api_key:          {}", mask_secret(api_key));
     println!(
@@ -759,13 +761,12 @@ async fn handle_set_preset_command(
 
     let known: std::collections::HashSet<String> = presets::list()?
         .iter()
-        .filter_map(|p| {
-            p.get("id")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string())
-        })
+        .filter_map(|p| p.get("id").and_then(|v| v.as_str()).map(|s| s.to_string()))
         .collect();
-    let missing: Vec<&String> = preset_ids.iter().filter(|id| !known.contains(*id)).collect();
+    let missing: Vec<&String> = preset_ids
+        .iter()
+        .filter(|id| !known.contains(*id))
+        .collect();
     if !missing.is_empty() {
         eprintln!(
             "warning: preset(s) not found in store ({}). Pipe will fall back to default at run time.",
@@ -807,7 +808,14 @@ fn mask_secret(s: &str) -> String {
         return "*".repeat(chars.len());
     }
     let prefix: String = chars.iter().take(4).collect();
-    let suffix: String = chars.iter().rev().take(4).collect::<Vec<_>>().into_iter().rev().collect();
+    let suffix: String = chars
+        .iter()
+        .rev()
+        .take(4)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect();
     format!("{}…{}", prefix, suffix)
 }
 

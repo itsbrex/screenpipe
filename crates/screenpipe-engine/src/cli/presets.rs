@@ -133,8 +133,8 @@ fn read_store() -> Result<Value> {
     if !path.exists() {
         return Ok(json!({}));
     }
-    let content = std::fs::read_to_string(&path)
-        .with_context(|| format!("reading {}", path.display()))?;
+    let content =
+        std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
     if content.trim().is_empty() {
         return Ok(json!({}));
     }
@@ -194,16 +194,12 @@ fn presets_array_mut(store: &mut Value) -> Result<&mut Vec<Value>> {
     let store_obj = store
         .as_object_mut()
         .ok_or_else(|| anyhow!("store root is not an object"))?;
-    let settings_entry = store_obj
-        .entry("settings")
-        .or_insert_with(|| json!({}));
+    let settings_entry = store_obj.entry("settings").or_insert_with(|| json!({}));
     if !settings_entry.is_object() {
         *settings_entry = json!({});
     }
     let settings = settings_entry.as_object_mut().unwrap();
-    let presets_val = settings
-        .entry("aiPresets")
-        .or_insert_with(|| json!([]));
+    let presets_val = settings.entry("aiPresets").or_insert_with(|| json!([]));
     if !presets_val.is_array() {
         *presets_val = json!([]);
     }
@@ -255,7 +251,10 @@ fn validate_api_key_shape(provider: Provider, key: &str) -> Result<()> {
     match provider {
         Provider::OpenAi => {
             if !key.starts_with("sk-") {
-                bail!("openai api keys start with 'sk-' (got prefix '{}')", &key[..key.len().min(6)]);
+                bail!(
+                    "openai api keys start with 'sk-' (got prefix '{}')",
+                    &key[..key.len().min(6)]
+                );
             }
         }
         Provider::Anthropic => {
@@ -274,7 +273,10 @@ fn validate_api_key_shape(provider: Provider, key: &str) -> Result<()> {
 
 fn validate_max_context_chars(v: i64) -> Result<()> {
     if !(1000..=2_000_000).contains(&v) {
-        bail!("max_context_chars must be between 1000 and 2000000 (got {})", v);
+        bail!(
+            "max_context_chars must be between 1000 and 2000000 (got {})",
+            v
+        );
     }
     Ok(())
 }
@@ -750,7 +752,9 @@ mod tests {
         assert!(validate_provider_combo(Provider::Anthropic, None, Some("sk-x")).is_err());
 
         assert!(validate_provider_combo(Provider::ScreenpipeCloud, None, None).is_ok());
-        assert!(validate_provider_combo(Provider::ScreenpipeCloud, Some("http://x"), None).is_err());
+        assert!(
+            validate_provider_combo(Provider::ScreenpipeCloud, Some("http://x"), None).is_err()
+        );
         assert!(validate_provider_combo(Provider::ScreenpipeCloud, None, Some("k")).is_err());
 
         assert!(validate_provider_combo(Provider::Custom, Some("http://x"), Some("k")).is_ok());

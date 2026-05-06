@@ -307,7 +307,8 @@ impl TreeWalkerPlatform for WindowsTreeWalker {
         // Per-app document_path resolution from on-disk state files
         // (Obsidian config + VS Code-fork state.vscdb). Returns None
         // for any unknown app or any failure — never panics.
-        let document_path = super::electron_docs::resolve_electron_doc_path(&app_name.to_lowercase());
+        let document_path =
+            super::electron_docs::resolve_electron_doc_path(&app_name.to_lowercase());
         Ok(TreeWalkResult::Found(TreeSnapshot {
             app_name,
             window_name,

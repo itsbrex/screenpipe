@@ -313,11 +313,7 @@ pub(super) mod vscode_fork {
         ) {
             Ok(c) => c,
             Err(e) => {
-                debug!(
-                    "vscode_fork: open {} failed: {}",
-                    db_path.display(),
-                    e
-                );
+                debug!("vscode_fork: open {} failed: {}", db_path.display(), e);
                 return None;
             }
         };
@@ -330,11 +326,7 @@ pub(super) mod vscode_fork {
             Ok(s) => s,
             Err(rusqlite::Error::QueryReturnedNoRows) => return None,
             Err(e) => {
-                debug!(
-                    "vscode_fork: query on {} failed: {}",
-                    db_path.display(),
-                    e
-                );
+                debug!("vscode_fork: query on {} failed: {}", db_path.display(), e);
                 return None;
             }
         };
