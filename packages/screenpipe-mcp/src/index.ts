@@ -28,33 +28,66 @@ for (let i = 0; i < args.length; i++) {
 
 const SCREENPIPE_API = `http://localhost:${port}`;
 
-// Discover API key: env var > db.sqlite direct read > npx fallbacks
+// Discover the local API key, in priority order:
+//
+//   1. env vars set by the launcher (Claude Desktop config, terminal, etc.)
+//   2. direct sqlite3 read of ~/.screenpipe/db.sqlite (plaintext entries only —
+//      encrypted ones need keychain, handled by 3+)
+//   3. bundled `bun` shipped with the desktop app → `bun x screenpipe@latest auth token`
+//      this is the kill-shot for Claude-Desktop-via-MCP: Claude strips PATH so
+//      `npx` and `sqlite3` lookups fail, but the desktop app's bundled bun is
+//      at a deterministic path. We invoke it with an absolute path, which
+//      then runs the screenpipe CLI's `auth token` command — which goes
+//      through `find_api_auth_key` (handles the encrypted-secret-store case).
+//   4. node-adjacent npx (legacy fallback for users without the desktop app)
+//   5. PATH-based npx (very last resort)
+//
+// If all 5 miss we log a loud stderr warning so it surfaces in the host's
+// MCP log instead of the user just seeing 403s with no explanation.
 function discoverApiKey(): string {
   const envKey = process.env.SCREENPIPE_LOCAL_API_KEY || process.env.SCREENPIPE_API_KEY;
   if (envKey) return envKey;
 
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
   const os = require("os");
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
   const path = require("path");
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
   const fs = require("fs");
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { execFileSync, execSync } = require("child_process");
 
-  // Read api_auth_key directly from ~/.screenpipe/db.sqlite.
-  // The key may be stored as plaintext base64 (nonce=zeros, keychain unavailable)
-  // or encrypted (non-zero nonce, keychain was available at write time).
-  // If plaintext: decode and return. If encrypted: skip, fall through to CLI.
+  // Common absolute paths for `sqlite3`. Claude Desktop's MCP launcher
+  // strips PATH so the bare command name `sqlite3` would fail spawn
+  // even though `/usr/bin/sqlite3` is always present on macOS. Try the
+  // bare name first (cheap; works on dev machines with a normal shell)
+  // then walk known absolute paths.
+  const sqliteCandidates: string[] =
+    process.platform === "win32"
+      ? ["sqlite3.exe", "C\\:Windows\\System32\\sqlite3.exe"]
+      : process.platform === "darwin"
+      ? ["sqlite3", "/usr/bin/sqlite3", "/opt/homebrew/bin/sqlite3", "/usr/local/bin/sqlite3"]
+      : ["sqlite3", "/usr/bin/sqlite3", "/usr/local/bin/sqlite3"];
+
+  // 2. Direct sqlite3 read of the secret store. Only succeeds for
+  //    plaintext entries (nonce all zeros). Encrypted entries fall
+  //    through to the CLI path which can decrypt via keychain.
   try {
     const dbPath = path.join(os.homedir(), ".screenpipe", "db.sqlite");
     if (fs.existsSync(dbPath)) {
-      const sqliteBin = process.platform === "win32" ? "sqlite3.exe" : "sqlite3";
-      // Check nonce — all zeros means plaintext base64, non-zero means encrypted
-      const row = execFileSync(sqliteBin, [
-        dbPath,
-        "SELECT hex(nonce), value FROM secrets WHERE key = 'api_auth_key';",
-      ], {
-        timeout: 5000,
-        encoding: "utf-8",
-        stdio: ["pipe", "pipe", "pipe"],
-      }).trim();
+      let row: string | null = null;
+      for (const candidate of sqliteCandidates) {
+        try {
+          row = execFileSync(
+            candidate,
+            [dbPath, "SELECT hex(nonce), value FROM secrets WHERE key = 'api_auth_key';"],
+            { timeout: 5000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] },
+          ).trim();
+          break;
+        } catch {
+          // try next candidate
+        }
+      }
       if (row) {
         const sepIdx = row.indexOf("|");
         const nonceHex = sepIdx >= 0 ? row.substring(0, sepIdx) : "";
@@ -65,32 +98,96 @@ function discoverApiKey(): string {
           if (decoded && decoded.startsWith("sp-")) return decoded;
           if (value.startsWith("sp-")) return value;
         }
-        // Non-zero nonce = encrypted — fall through to CLI which can decrypt via keychain
+        // Non-zero nonce = encrypted — fall through to bun/npx which decrypt via keychain.
       }
     }
   } catch {}
 
-  // Fallback: use the current Node binary to find npx (no PATH dependency)
+  // 3. Bundled `bun` shipped with the desktop app. The Tauri externalBin
+  //    config (apps/screenpipe-app-tauri/src-tauri/tauri.prod.conf.json)
+  //    places it next to the main app executable; on each OS the install
+  //    path is deterministic so we don't need PATH or current_exe — both
+  //    of which Claude Desktop's MCP launcher rolls back.
+  const home = os.homedir();
+  const bunCandidates: string[] =
+    process.platform === "darwin"
+      ? [
+          // Standard system-wide install
+          "/Applications/screenpipe.app/Contents/MacOS/bun",
+          // Per-user install
+          path.join(home, "Applications", "screenpipe.app", "Contents", "MacOS", "bun"),
+        ]
+      : process.platform === "win32"
+      ? [
+          // NSIS per-user (default on Windows)
+          path.join(home, "AppData", "Local", "screenpipe", "bun.exe"),
+          // Per-user under "screenpipe-app" (older builds)
+          path.join(home, "AppData", "Local", "screenpipe-app", "bun.exe"),
+          // System-wide install
+          "C:\\Program Files\\screenpipe\\bun.exe",
+        ]
+      : [
+          // Linux .deb
+          "/opt/screenpipe/bun",
+          "/usr/lib/screenpipe/bun",
+          "/usr/bin/bun",
+        ];
+  for (const bunPath of bunCandidates) {
+    if (!fs.existsSync(bunPath)) continue;
+    try {
+      const token = execFileSync(bunPath, ["x", "screenpipe@latest", "auth", "token"], {
+        timeout: 30000, // first run downloads the package; subsequent runs are cached
+        encoding: "utf-8",
+        stdio: ["pipe", "pipe", "pipe"],
+      }).trim();
+      if (token && token.startsWith("sp-")) return token;
+    } catch {
+      // try next candidate
+    }
+  }
+
+  // 4. npx adjacent to the running node — works in dev environments
+  //    where the user installed @screenpipe/mcp via npx without the
+  //    desktop app.
   try {
-    const npxPath = path.join(path.dirname(process.execPath), "npx");
-    const token = execFileSync(npxPath, ["screenpipe@latest", "auth", "token"], {
-      timeout: 15000,
-      encoding: "utf-8",
-      stdio: ["pipe", "pipe", "pipe"],
-    }).trim();
-    if (token) return token;
+    const npxName = process.platform === "win32" ? "npx.cmd" : "npx";
+    const npxPath = path.join(path.dirname(process.execPath), npxName);
+    if (fs.existsSync(npxPath)) {
+      const token = execFileSync(npxPath, ["screenpipe@latest", "auth", "token"], {
+        timeout: 30000,
+        encoding: "utf-8",
+        stdio: ["pipe", "pipe", "pipe"],
+      }).trim();
+      if (token && token.startsWith("sp-")) return token;
+    }
   } catch {}
 
-  // Last resort: npx on PATH
+  // 5. PATH-based npx — last-ditch. Will fail under Claude Desktop's
+  //    sanitized env; useful only on raw shells.
   try {
     const token = execSync("npx screenpipe@latest auth token", {
-      timeout: 15000,
+      timeout: 30000,
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
     }).trim();
-    if (token) return token;
+    if (token && token.startsWith("sp-")) return token;
   } catch {}
 
+  // All five paths missed. Log loudly to stderr so the host's MCP
+  // panel surfaces this instead of the user seeing cryptic 403s from
+  // the screenpipe server on every tool call.
+  process.stderr.write(
+    [
+      "[screenpipe-mcp] could not discover SCREENPIPE_LOCAL_API_KEY from any source.",
+      "  - env vars (SCREENPIPE_LOCAL_API_KEY / SCREENPIPE_API_KEY) not set",
+      "  - direct sqlite3 read of ~/.screenpipe/db.sqlite failed",
+      "  - bundled `bun` from screenpipe.app not found at any known install path",
+      "  - npx fallback unavailable",
+      "Fix: set SCREENPIPE_LOCAL_API_KEY in your MCP launcher's env block,",
+      "or install the screenpipe desktop app (https://screenpi.pe).",
+      "",
+    ].join("\n"),
+  );
   return "";
 }
 
