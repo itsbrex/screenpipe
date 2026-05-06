@@ -212,26 +212,25 @@ struct ShortcutReminderView: View {
     }
 
     // MARK: - Collapsed pill
-    // Split into two zones so hovering the phone icon doesn't expand the bar
-    // out from under the cursor. The left zone (icon + equalizer + screen)
-    // expands on hover; the phone is a real button that toggles the meeting
-    // directly, bypassing the expanded layout entirely.
+    // Three zones, so the only thing that expands on hover is the middle
+    // (equalizer + screen matrix). The app icon opens the timeline; the
+    // phone toggles the meeting. Both stay put under the cursor.
     private var collapsedView: some View {
         HStack(spacing: 0) {
+            CollapsedAppIconButton(
+                scale: scale,
+                action: { onAction("open_timeline") }
+            )
+            .padding(.leading, s(5))
+
             HStack(spacing: s(3)) {
-                if let appIcon = NSApp.applicationIconImage {
-                    Image(nsImage: appIcon)
-                        .resizable()
-                        .frame(width: s(12), height: s(12))
-                }
                 AudioEqualizerView(active: metrics.audioActive, speechRatio: metrics.speechRatio)
                     .frame(width: s(18), height: s(12))
                 ScreenMatrixView(active: metrics.screenActive, captureFps: metrics.captureFps)
                     .frame(width: s(18), height: s(12))
                     .clipShape(RoundedRectangle(cornerRadius: 1))
             }
-            .padding(.leading, s(5))
-            .padding(.trailing, s(3))
+            .padding(.horizontal, s(3))
             .frame(maxHeight: .infinity)
             .contentShape(Rectangle())
             .onHover { hovering in
@@ -318,6 +317,32 @@ struct ShortcutCellButton: View {
             .padding(.horizontal, 6 * scale)
             .frame(width: colW).frame(maxHeight: .infinity)
             .background(hovered ? Color.white.opacity(0.12) : Color.clear)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { h in hovered = h }
+    }
+}
+
+// App icon button shown in the collapsed pill. Click opens the timeline;
+// hovering it does NOT expand the bar — same rationale as the phone button.
+@available(macOS 13.0, *)
+struct CollapsedAppIconButton: View {
+    let scale: CGFloat
+    let action: () -> Void
+    @State private var hovered = false
+
+    var body: some View {
+        Button(action: action) {
+            Group {
+                if let appIcon = NSApp.applicationIconImage {
+                    Image(nsImage: appIcon)
+                        .resizable()
+                        .frame(width: 12 * scale, height: 12 * scale)
+                        .opacity(hovered ? 1.0 : 0.85)
+                }
+            }
+            .frame(maxHeight: .infinity)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
