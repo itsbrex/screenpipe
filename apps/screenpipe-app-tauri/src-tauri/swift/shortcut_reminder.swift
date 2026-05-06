@@ -192,8 +192,14 @@ struct ShortcutReminderView: View {
     var body: some View {
         ZStack {
             if isExpanded {
+                // Once expanded, collapse only when the mouse leaves the
+                // entire expanded bar (so hovering individual buttons inside
+                // doesn't bounce us back).
                 expandedView
                     .transition(.opacity.combined(with: .scale(scale: 0.8, anchor: .trailing)))
+                    .onHover { hovering in
+                        if !hovering { isExpanded = false }
+                    }
             } else {
                 collapsedView
                     .transition(.opacity.combined(with: .scale(scale: 1.2, anchor: .trailing)))
@@ -202,37 +208,43 @@ struct ShortcutReminderView: View {
         .fixedSize()
         .accessibilityHidden(true)
         .animation(.easeInOut(duration: kAnimDur), value: isExpanded)
-        .onHover { hovering in
-            isExpanded = hovering
-        }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     }
 
     // MARK: - Collapsed pill
+    // Split into two zones so hovering the phone icon doesn't expand the bar
+    // out from under the cursor. The left zone (icon + equalizer + screen)
+    // expands on hover; the phone is a real button that toggles the meeting
+    // directly, bypassing the expanded layout entirely.
     private var collapsedView: some View {
-        HStack(spacing: s(3)) {
-            if let appIcon = NSApp.applicationIconImage {
-                Image(nsImage: appIcon)
-                    .resizable()
-                    .frame(width: s(12), height: s(12))
-            }
-            AudioEqualizerView(active: metrics.audioActive, speechRatio: metrics.speechRatio)
-                .frame(width: s(18), height: s(12))
-            ScreenMatrixView(active: metrics.screenActive, captureFps: metrics.captureFps)
-                .frame(width: s(18), height: s(12))
-                .clipShape(RoundedRectangle(cornerRadius: 1))
-            ZStack {
-                Image(systemName: "phone.fill")
-                    .font(.system(size: s(6)))
-                    .foregroundColor(metrics.meetingActive ? .white : .white.opacity(0.2))
-                if metrics.meetingActive {
-                    Circle().fill(.white)
-                        .frame(width: s(4), height: s(4))
-                        .offset(x: s(5), y: s(-5))
+        HStack(spacing: 0) {
+            HStack(spacing: s(3)) {
+                if let appIcon = NSApp.applicationIconImage {
+                    Image(nsImage: appIcon)
+                        .resizable()
+                        .frame(width: s(12), height: s(12))
                 }
+                AudioEqualizerView(active: metrics.audioActive, speechRatio: metrics.speechRatio)
+                    .frame(width: s(18), height: s(12))
+                ScreenMatrixView(active: metrics.screenActive, captureFps: metrics.captureFps)
+                    .frame(width: s(18), height: s(12))
+                    .clipShape(RoundedRectangle(cornerRadius: 1))
             }
+            .padding(.leading, s(5))
+            .padding(.trailing, s(3))
+            .frame(maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .onHover { hovering in
+                if hovering { isExpanded = true }
+            }
+
+            CollapsedPhoneButton(
+                isActive: metrics.meetingActive,
+                scale: scale,
+                action: { onAction("toggle_meeting") }
+            )
+            .padding(.trailing, s(5))
         }
-        .padding(.horizontal, s(5))
         .frame(height: kBaseCollapsedH * scale)
         .background(Capsule().fill(Color.black.opacity(0.75)))
         .overlay(Capsule().stroke(.white.opacity(0.15), lineWidth: 0.5))
@@ -306,6 +318,41 @@ struct ShortcutCellButton: View {
             .padding(.horizontal, 6 * scale)
             .frame(width: colW).frame(maxHeight: .infinity)
             .background(hovered ? Color.white.opacity(0.12) : Color.clear)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { h in hovered = h }
+    }
+}
+
+// Phone button shown in the collapsed pill. Same look as the bare icon it
+// replaces, plus a subtle hover halo so the click target is discoverable.
+// Crucially: no .onHover wired to isExpanded — clicking it toggles the
+// meeting without forcing the user through the expanded layout.
+@available(macOS 13.0, *)
+struct CollapsedPhoneButton: View {
+    let isActive: Bool
+    let scale: CGFloat
+    let action: () -> Void
+    @State private var hovered = false
+
+    var body: some View {
+        Button(action: action) {
+            ZStack {
+                Image(systemName: "phone.fill")
+                    .font(.system(size: 6 * scale))
+                    .foregroundColor(
+                        isActive ? .white :
+                            (hovered ? .white.opacity(0.6) : .white.opacity(0.2))
+                    )
+                if isActive {
+                    Circle().fill(.white)
+                        .frame(width: 4 * scale, height: 4 * scale)
+                        .offset(x: 5 * scale, y: -5 * scale)
+                }
+            }
+            .frame(width: 14 * scale)
+            .frame(maxHeight: .infinity)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
