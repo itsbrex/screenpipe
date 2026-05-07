@@ -1098,10 +1098,18 @@ jobs:
           codesign --verify --deep --strict --verbose=2 "$APP"
           echo "✅ ${APP##*/} re-signed with mlx.metallib in Contents/MacOS/"
 
-          # Rebuild the DMG so it ships the modified .app. We mount the
-          # original DMG read-write to preserve Tauri's layout (background
-          # image, icon positions), swap the .app inside, then convert back
-          # to UDZO. Avoids re-running tauri's DMG creator (which re-signs).
+          # Rebuild the DMG so it ships the modified .app.
+          #
+          # The mount-and-swap approach (UDRW convert → attach → cp .app →
+          # detach → UDZO convert) blew through CI runner disk space — the
+          # ~600 MB .app gets duplicated into the mounted DMG, on top of
+          # the existing UDRW + UDZO copies (~3× peak disk usage). v2.4.154
+          # hit "fcopyfile failed: No space left on device".
+          #
+          # Cheaper: delete the original DMG to free space, then create a
+          # fresh DMG from the patched .app via `hdiutil create`. We lose
+          # Tauri's DMG layout (background image, icon positions) but
+          # those are cosmetic — the .app inside still installs and runs.
           DMG_DIR="${BUNDLE_DIR}/dmg"
           dmgs=( "${DMG_DIR}"/*.dmg )
           if [ ${#dmgs[@]} -eq 0 ]; then
@@ -1109,34 +1117,21 @@ jobs:
             exit 0
           fi
           DMG="${dmgs[0]}"
-          DMG_RW="${DMG%.dmg}.rw.dmg"
-          # Mount under RUNNER_TEMP (always writable) instead of /Volumes/.
-          # On macOS CI runners /Volumes/ is root-owned, so `mkdir` there
-          # fails with "Permission denied" — that's how 2.4.153 broke.
-          # Falling back to /tmp/ on local runs without RUNNER_TEMP set.
-          MOUNT="${RUNNER_TEMP:-/tmp}/screenpipe-mlx-edit-$$"
+          echo "=== Replacing DMG: ${DMG##*/} ==="
+          df -h "$DMG_DIR" | tail -1
+          rm -f "$DMG"
+          hdiutil create \
+            -volname "Screenpipe" \
+            -srcfolder "$APP" \
+            -ov \
+            -format UDZO \
+            -imagekey zlib-level=9 \
+            "$DMG"
 
-          echo "=== Patching DMG: ${DMG##*/} ==="
-          hdiutil convert "$DMG" -format UDRW -o "$DMG_RW"
-          mkdir -p "$MOUNT"
-          hdiutil attach "$DMG_RW" -mountpoint "$MOUNT" -nobrowse -noautoopen
-
-          # Replace the .app inside the mounted DMG with the patched one.
-          rm -rf "${MOUNT}/$(basename "$APP")"
-          cp -R "$APP" "${MOUNT}/"
-
-          hdiutil detach "$MOUNT"
-
-          # Re-compress to read-only zlib-level-9 (same as Tauri's default).
-          DMG_NEW="${DMG%.dmg}.new.dmg"
-          hdiutil convert "$DMG_RW" -format UDZO -imagekey zlib-level=9 -o "$DMG_NEW"
-          mv "$DMG_NEW" "$DMG"
-          rm "$DMG_RW"
-
-          # Re-sign the patched DMG so notarization sees a clean cdhash.
+          # Sign the new DMG so notarization sees a clean cdhash.
           codesign --force --sign "$APPLE_SIGNING_IDENTITY" --timestamp "$DMG"
           codesign --verify --verbose=2 "$DMG"
-          echo "✅ ${DMG##*/} rebuilt + signed with patched .app"
+          echo "✅ ${DMG##*/} re-created + signed from patched .app"
 
       - name: Clean up signing cert from login keychain (macOS)
         if: matrix.os_type == 'macos' && always()
