@@ -462,26 +462,23 @@ pub async fn run(
     info!("enterprise sync: shutdown signal received, exiting cleanly");
 }
 
-/// Sleep for `dur` or return early when shutdown fires. Returns true if
-/// shutdown was signalled (caller should break).
+/// Sleep for `dur`, then report whether shutdown has been signalled.
 ///
-/// `Sender` dropped (= channel closed) is intentionally **not** treated as a
-/// shutdown signal: in the desktop wiring the spawn site doesn't keep the
-/// `Sender` around (there's no graceful-shutdown protocol — tauri just SIGKILLs
-/// the process on quit), so the channel closes immediately after spawn. If
-/// we honored that as shutdown, the task would exit after one tick. We only
-/// break on an explicit `Sender::send(true)` from a test.
+/// We deliberately do NOT race the sleep against `shutdown.changed()`. In
+/// the desktop wiring the `Sender` is dropped immediately after spawn (no
+/// graceful-shutdown protocol — tauri SIGKILLs on quit), which makes
+/// `changed()` resolve with `Err` instantly. Racing would then return from
+/// `tokio::select!` after ~0ms instead of `dur` and the loop would hot-spin.
+///
+/// Trade-off: tests that signal shutdown have to wait up to one `dur` before
+/// the loop notices. That's fine — production `dur` is 5min, tests can use
+/// short intervals.
 async fn sleep_or_shutdown(
     dur: Duration,
     shutdown: &mut tokio::sync::watch::Receiver<bool>,
 ) -> bool {
-    tokio::select! {
-        _ = tokio::time::sleep(dur) => false,
-        changed = shutdown.changed() => {
-            // Sender dropped → keep running. Explicit `true` value → shutdown.
-            changed.is_ok() && *shutdown.borrow()
-        }
-    }
+    tokio::time::sleep(dur).await;
+    *shutdown.borrow()
 }
 
 // ─── Tests ──────────────────────────────────────────────────────────────────
