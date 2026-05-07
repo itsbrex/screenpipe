@@ -9976,7 +9976,7 @@ dependencies = [
 
 [[package]]
 name = "screenpipe-app"
-version = "2.4.155"
+version = "2.4.157"
 dependencies = [
  "anyhow",
  "arboard",
@@ -9984,6 +9984,7 @@ dependencies = [
  "axum 0.6.20",
  "base64 0.22.1",
  "block",
+ "cc",
  "chrono",
  "chrono-tz",
  "cocoa 0.26.1",
@@ -13037,7 +13038,7 @@ dependencies = [
 [[package]]
 name = "tinfoil"
 version = "0.1.0"
-source = "git+https://github.com/tinfoilsh/tinfoil-rs#1e0de1acd51675ccfb7e61fbc725e5ca653f0454"
+source = "git+https://github.com/screenpipe/tinfoil-rs?branch=ring-on-windows#03f4585d580ac1f125219c47a8efcc760c9d3b1f"
 dependencies = [
  "async-openai",
  "base64 0.22.1",

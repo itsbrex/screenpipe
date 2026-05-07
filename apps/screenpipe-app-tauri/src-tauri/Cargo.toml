@@ -1,6 +1,6 @@
 [package]
 name = "screenpipe-app"
-version = "2.4.156"
+version = "2.4.157"
 description = "24/7 memory for your desktop. 100% local."
 authors = ["you"]
 license = ""
@@ -13,6 +13,12 @@ rust-version = "1.92"
 
 [build-dependencies]
 tauri-build = { version = "=2.5.4", features = [] }
+# Used by build.rs on Windows MSVC targets (incl. cross-compiles from
+# Linux/macOS CI runners) to compile c/bswap_shim.c — provides
+# __builtin_bswap{16,32,64} as real functions to satisfy the aws-lc-sys
+# link. Unconditional because target-gated build-deps key off the build
+# *host*, not the target, which excludes cc on cross-compiles.
+cc = "1"
 
 [dependencies]
 tauri = { version = "=2.10.1", features = [
