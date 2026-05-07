@@ -7,9 +7,7 @@ mod tests {
     // the crate root — import them via the `core` module to match how the
     // crate actually exposes them (see screenpipe-screen/src/lib.rs which
     // re-exports `RealtimeVisionEvent` from `core` but not the helpers).
-    use screenpipe_screen::core::{
-        continuous_capture, process_ocr_task, RawCaptureResult,
-    };
+    use screenpipe_screen::core::{continuous_capture, process_ocr_task, RawCaptureResult};
     use screenpipe_screen::monitor::get_default_monitor;
     use screenpipe_screen::ocr_cache::WindowOcrCache;
     use screenpipe_screen::{OcrEngine, PipelineMetrics};
