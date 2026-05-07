@@ -1105,7 +1105,11 @@ jobs:
           fi
           DMG="${dmgs[0]}"
           DMG_RW="${DMG%.dmg}.rw.dmg"
-          MOUNT="/Volumes/screenpipe-mlx-edit-$$"
+          # Mount under RUNNER_TEMP (always writable) instead of /Volumes/.
+          # On macOS CI runners /Volumes/ is root-owned, so `mkdir` there
+          # fails with "Permission denied" — that's how 2.4.153 broke.
+          # Falling back to /tmp/ on local runs without RUNNER_TEMP set.
+          MOUNT="${RUNNER_TEMP:-/tmp}/screenpipe-mlx-edit-$$"
 
           echo "=== Patching DMG: ${DMG##*/} ==="
           hdiutil convert "$DMG" -format UDRW -o "$DMG_RW"
