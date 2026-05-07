@@ -10,6 +10,7 @@ import {
   Check,
   Clock,
   Copy,
+  FileText,
   Loader2,
   Sparkles,
   Square,
@@ -48,6 +49,7 @@ import { cn } from "@/lib/utils";
 import { Receipts } from "./receipts";
 import { ReplayStrip } from "./replay-strip";
 import { NoteEditor } from "./note-editor";
+import { TranscriptPanel } from "./transcript-panel";
 
 const AUTOSAVE_DEBOUNCE_MS = 800;
 
@@ -85,6 +87,7 @@ export function NoteView({
   const [copying, setCopying] = useState(false);
   const [copied, setCopied] = useState(false);
   const [meetingCtx, setMeetingCtx] = useState<MeetingContext | null>(null);
+  const [transcriptOpen, setTranscriptOpen] = useState(false);
 
   const lastSavedRef = useRef({
     title: meeting.title ?? "",
@@ -319,7 +322,13 @@ export function NoteView({
     .filter(Boolean).length;
 
   return (
-    <div className="h-full overflow-y-auto flex flex-col">
+    <div className="h-full overflow-y-auto flex flex-col relative">
+      <TranscriptPanel
+        meeting={meeting}
+        isOpen={transcriptOpen}
+        onClose={() => setTranscriptOpen(false)}
+        isLive={isLive}
+      />
       <div className="flex-1 max-w-3xl w-full mx-auto px-12 pt-10 pb-6">
         <div className="flex items-center justify-between mb-8">
           <Button
@@ -332,6 +341,18 @@ export function NoteView({
             meetings
           </Button>
           <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setTranscriptOpen((v) => !v)}
+              title={transcriptOpen ? "hide transcript" : "view full transcript"}
+              className={cn(
+                "h-8 w-8 p-0",
+                transcriptOpen && "bg-muted text-foreground",
+              )}
+            >
+              <FileText className="h-3.5 w-3.5" />
+            </Button>
             <Button
               variant="ghost"
               size="sm"
