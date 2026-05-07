@@ -2039,6 +2039,46 @@ export function StandaloneChat({
     useChatStore.getState().actions.setPanelSession(conversationId);
   }, [conversationId]);
 
+  // E2E hook: expose a function to seed a user message into a session.
+  // Required by parallel-chat.spec.ts because `ensureAssistantPlaceholder`
+  // (added 2026-04-29 in e1f55023d) only creates an assistant bubble when
+  // the last message is `role: "user"`. Without a way to inject a user
+  // message, the test's pure pi_event-faking path can't materialize any
+  // assistant DOM and CI has been red on every PR since.
+  // Production impact: zero — only adds a non-functional reference on
+  // window. Not gated by env so the e2e build (which uses prod Next.js
+  // bundling) can reach it.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    (window as any).__e2eSeedUserMessage = (sid: string, text: string) => {
+      const id = `e2e-user-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      useChatStore.getState().actions.appendMessage(sid, {
+        id,
+        role: "user",
+        content: text,
+        timestamp: Date.now(),
+      } as any);
+      // If the panel is currently rendering this session, mirror into
+      // local state so the placeholder check in the next text_delta sees
+      // a "user" tail. Production never needs this — sendPiMessage handles
+      // both store + local state in one shot.
+      if (sid === piSessionIdRef.current) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id,
+            role: "user",
+            content: text,
+            timestamp: Date.now(),
+          } as any,
+        ]);
+      }
+    };
+    return () => {
+      delete (window as any).__e2eSeedUserMessage;
+    };
+  }, []);
+
   // Cross-window rename sync. The chat-store is window-local (zustand
   // lives in each WebView's JS context), so a rename done in the /chat
   // overlay would otherwise never reach the chat-sidebar in /home. The

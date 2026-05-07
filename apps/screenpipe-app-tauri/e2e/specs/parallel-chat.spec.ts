@@ -69,9 +69,37 @@ async function switchToSession(id: string): Promise<void> {
   await browser.pause(t(400));
 }
 
+/** Seed a user message into a session via the e2e hook the chat panel
+ *  exposes on `window.__e2eSeedUserMessage`. Required because
+ *  `ensureAssistantPlaceholder` only creates an assistant bubble when the
+ *  last message in the session is `role: "user"` (added 2026-04-29) — so
+ *  faking pi_event with no preceding user message is a no-op. */
+async function seedUserMessage(sessionId: string, text: string): Promise<void> {
+  await browser.executeAsync(
+    (sid: string, txt: string, done: (v?: unknown) => void) => {
+      const g = globalThis as unknown as {
+        __e2eSeedUserMessage?: (sid: string, txt: string) => void;
+      };
+      if (typeof g.__e2eSeedUserMessage === "function") {
+        g.__e2eSeedUserMessage(sid, txt);
+      }
+      done();
+    },
+    sessionId,
+    text,
+  );
+  await browser.pause(t(100));
+}
+
 /** Fake one Pi assistant turn for a session. Forges the same envelope
- *  Rust emits: { sessionId, event }. */
+ *  Rust emits: { sessionId, event }. Seeds a synthetic user message
+ *  first because the panel's placeholder logic requires a user-message
+ *  tail before it'll materialize an assistant bubble for streaming
+ *  deltas. In production, `sendPiMessage` does this; in tests we do it
+ *  via the `__e2eSeedUserMessage` hook. */
 async function fakePiTurn(sessionId: string, fullText: string): Promise<void> {
+  await seedUserMessage(sessionId, `(e2e) prompt for: ${fullText}`);
+
   await emitFromWebview('pi_event', {
     sessionId,
     event: { type: 'message_start', message: { role: 'assistant' } },
