@@ -1032,10 +1032,15 @@ jobs:
         # Now: copy + re-sign + rebuild DMG so the very first signature
         # already covers Contents/MacOS/mlx.metallib.
         #
-        # Only runs for builds that ship parakeet-mlx (currently aarch64).
-        # Skips silently if the resource is missing (placeholder build) or
-        # under 1 MB (download failed in build.rs — empty placeholder).
-        if: matrix.os_type == 'macos'
+        # Only runs for the macOS aarch64 build, which is the only target
+        # that enables parakeet-mlx. Other macOS targets (x86_64) ship the
+        # metallib via bundle.resources too (because build.rs downloads it
+        # whenever the build host is aarch64), but parakeet-mlx isn't
+        # compiled in for x86_64 so MLX never tries to load it — and the
+        # disk-mount + DMG-rebuild step blew through CI runner disk space
+        # on x86_64 in v2.4.154 ("fcopyfile failed: No space left on
+        # device") for no benefit. Narrow to where it actually matters.
+        if: matrix.target == 'aarch64-apple-darwin'
         shell: bash
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
